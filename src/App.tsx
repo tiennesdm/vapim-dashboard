@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { HashRouter, Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
+import { HashRouter, Routes, Route, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import {
   LayoutDashboard, Box, Store, AppWindow, CreditCard, BarChart3, Gauge, Users,
   Menu, Search, Bell, UserCircle, LogOut, Plus, Edit3, Trash2, Rocket,
-  Eye, Download, Activity, AlertTriangle
+  Eye, Download, Activity, AlertTriangle, ArrowLeft, Play, Copy, Terminal,
+  Check, Clock, Tag, Shield, Globe, FileText, Layers, Zap,
+  Sun, Moon, RefreshCw, Settings, Home, Webhook, User, ChevronRight
 } from 'lucide-react';
 import { api } from './lib/api';
 import { Button } from './components/ui/button';
@@ -14,18 +16,35 @@ import { Badge } from './components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from './components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from './components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from './components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './components/ui/tabs';
 import { ScrollArea } from './components/ui/scroll-area';
 import { Separator } from './components/ui/separator';
 import { Sheet, SheetContent } from './components/ui/sheet';
 import { Tooltip, TooltipContent, TooltipTrigger } from './components/ui/tooltip';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from './components/ui/dropdown-menu';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from './components/ui/table';
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Legend, ResponsiveContainer } from 'recharts';
+import { usePageTitle } from './hooks/usePageTitle';
+import { SettingsPage } from './pages/SettingsPage';
+import { AuditLogsPage } from './pages/AuditLogsPage';
+import { WebhooksPage } from './pages/WebhooksPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 import './App.css';
 
+// ─── Unique Gradient ID Generator ────────────────────
+let gradientCounter = 0;
+function useGradientId(prefix: string) {
+  const idRef = useRef<string>('');
+  if (!idRef.current) {
+    gradientCounter++;
+    idRef.current = `${prefix}-${gradientCounter}-${Date.now()}`;
+  }
+  return idRef.current;
+}
+
 // ─── Types ───────────────────────────────────────────
-interface APIItem { id: string; name: string; context: string; version: string; endpoint: string; status: string; authType: string; throttlePolicy: string; description: string; }
+interface APIItem { id: string; name: string; context: string; version: string; endpoint: string; status: string; authType: string; throttlePolicy: string; description: string; tags?: string[]; provider?: string; rating?: number; ratingCount?: number; visibility?: string; createdAt?: string; updatedAt?: string; documentation?: string; }
+interface APIResource { method: string; path: string; description: string; }
 interface AppItem { id: string; name: string; tier: string; description: string; consumerKey?: string; sandboxKey?: string; }
 interface Subscription { id: string; apiId: string; apiName: string; appId: string; appName: string; tier: string; status: string; createdAt: string; }
 interface Policy { id: string; name: string; type: string; rate: number; unit: string; burst: number; }
@@ -34,6 +53,14 @@ interface AnalyticsData { callsOverTime: { date: string; calls: number }[]; topA
 
 // ─── Auth Context ────────────────────────────────────
 const AuthCtx = createContext<{ token: string; setToken: (t: string) => void }>({ token: '', setToken: () => {} });
+
+// ─── Theme Context ───────────────────────────────────
+const ThemeCtx = createContext<{ theme: string; setTheme: (t: string) => void }>({ theme: 'system', setTheme: () => {} });
+
+// ─── usePageTitle hook (inline) ──────────────────────
+function useDocTitle(title: string) {
+  useEffect(() => { document.title = title; }, [title]);
+}
 
 // ─── Sidebar ─────────────────────────────────────────
 const navItems = [
@@ -47,13 +74,18 @@ const navItems = [
 const adminItems = [
   { label: 'Throttling', icon: Gauge, path: '/admin/throttle' },
   { label: 'Users', icon: Users, path: '/admin/users' },
+  { label: 'Audit Logs', icon: FileText, path: '/admin/audit-logs' },
+  { label: 'Webhooks', icon: Webhook, path: '/admin/webhooks' },
+];
+const bottomItems = [
+  { label: 'Settings', icon: Settings, path: '/settings' },
 ];
 
 function Sidebar({ mobileOpen, setMobileOpen, collapsed }: { mobileOpen: boolean; setMobileOpen: (v: boolean) => void; collapsed: boolean }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { setToken } = useContext(AuthCtx);
-  const isActive = (p: string) => location.pathname === p;
+  const isActive = (p: string) => location.pathname === p || (p !== '/' && location.pathname.startsWith(p));
 
   const NavButton = ({ item }: { item: typeof navItems[0] }) => {
     const Icon = item.icon;
@@ -92,6 +124,13 @@ function Sidebar({ mobileOpen, setMobileOpen, collapsed }: { mobileOpen: boolean
         <div className="space-y-1">
           {adminItems.map((item) => <NavButton key={item.path} item={item} />)}
         </div>
+        <div className="mt-auto">
+          {!collapsed && <Separator className="my-4" />}
+          {collapsed && <div className="my-2 border-t" />}
+          <div className="space-y-1">
+            {bottomItems.map((item) => <NavButton key={item.path} item={item} />)}
+          </div>
+        </div>
       </ScrollArea>
       <div className="p-3 border-t">
         <Button variant="ghost" className={`w-full justify-start gap-3 text-sm ${collapsed ? 'px-2' : ''}`} onClick={() => { localStorage.removeItem('token'); setToken(''); }}>
@@ -111,26 +150,88 @@ function Sidebar({ mobileOpen, setMobileOpen, collapsed }: { mobileOpen: boolean
         </SheetContent>
       </Sheet>
       {/* Desktop sidebar */}
-      <aside className={`hidden sm:flex h-screen border-r bg-background flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
+      <aside className={`hidden md:flex h-screen border-r bg-background flex-col transition-all duration-200 ${collapsed ? 'w-16' : 'w-64'}`}>
         {content}
       </aside>
     </>
   );
 }
 
+// ─── RefreshButton ───────────────────────────────────
+function RefreshButton({ onRefresh }: { onRefresh: () => Promise<void> }) {
+  const [refreshing, setRefreshing] = useState(false);
+  const handle = async () => {
+    setRefreshing(true);
+    try { await onRefresh(); toast.success('Data refreshed'); }
+    catch { toast.error('Refresh failed'); }
+    finally { setRefreshing(false); }
+  };
+  return (
+    <Button variant="outline" size="sm" className="gap-2 text-xs" onClick={handle} disabled={refreshing}>
+      <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+      {refreshing ? 'Refreshing...' : 'Refresh'}
+    </Button>
+  );
+}
+
+// ─── Breadcrumbs ─────────────────────────────────────
+function Breadcrumbs() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const path = location.pathname;
+  if (path === '/' || path === '/login') return null;
+  const segments: { label: string; path?: string }[] = [{ label: 'Home', path: '/' }];
+  if (path.startsWith('/admin')) {
+    segments.push({ label: 'Admin' });
+    if (path === '/admin/throttle') segments.push({ label: 'Rate Limiting' });
+    else if (path === '/admin/users') segments.push({ label: 'Users' });
+    else if (path === '/admin/audit-logs') segments.push({ label: 'Audit Logs' });
+    else if (path === '/admin/webhooks') segments.push({ label: 'Webhooks' });
+  } else if (path === '/apis') segments.push({ label: 'APIs' });
+  else if (path === '/store') segments.push({ label: 'Developer Portal' });
+  else if (path === '/apps') segments.push({ label: 'Applications' });
+  else if (path === '/subscriptions') segments.push({ label: 'Subscriptions' });
+  else if (path === '/analytics') segments.push({ label: 'Analytics' });
+  else if (path === '/settings') segments.push({ label: 'Settings' });
+  else segments.push({ label: path.replace(/^\//, '').replace(/-/g, ' ').replace(/^\w/, c => c.toUpperCase()) });
+  return (
+    <nav className="px-3 md:px-6 pt-3 pb-0">
+      <ol className="flex items-center gap-1.5 text-[10px] md:text-xs text-muted-foreground">
+        {segments.map((seg, i) => (
+          <li key={i} className="flex items-center gap-1.5">
+            {i > 0 && <ChevronRight className="w-3 h-3" />}
+            {seg.path ? (
+              <button onClick={() => navigate(seg.path!)} className="hover:text-foreground transition-colors">{seg.label}</button>
+            ) : (
+              <span className="text-foreground font-medium">{seg.label}</span>
+            )}
+          </li>
+        ))}
+      </ol>
+    </nav>
+  );
+}
+
 // ─── TopBar ──────────────────────────────────────────
 function TopBar({ onMenu }: { onMenu: () => void }) {
-  const { token } = useContext(AuthCtx);
+  const { token, setToken } = useContext(AuthCtx);
+  const { theme, setTheme } = useContext(ThemeCtx);
+  const navigate = useNavigate();
+  const cycleTheme = () => {
+    const next = theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light';
+    setTheme(next);
+    toast.info(`Theme: ${next}`);
+  };
   return (
-    <header className="h-16 border-b bg-background flex items-center justify-between px-3 sm:px-6 shrink-0">
+    <header className="h-16 border-b bg-background flex items-center justify-between px-3 md:px-6 shrink-0">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="sm:hidden" onClick={onMenu}>
+        <Button variant="ghost" size="icon" className="md:hidden" onClick={onMenu}>
           <Menu className="w-5 h-5" />
         </Button>
-        <h1 className="text-base sm:text-lg font-semibold">VedaDB API Manager</h1>
+        <h1 className="text-base md:text-lg font-semibold truncate">VedaDB API Manager</h1>
       </div>
-      <div className="flex items-center gap-2 sm:gap-4">
-        <div className="hidden sm:flex items-center relative">
+      <div className="flex items-center gap-2 md:gap-4">
+        <div className="hidden md:flex items-center relative">
           <Search className="w-4 h-4 absolute left-2.5 text-muted-foreground" />
           <Input placeholder="Search..." className="pl-9 w-64" />
         </div>
@@ -144,8 +245,33 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
               <UserCircle className="w-5 h-5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem disabled>{token ? 'Administrator' : 'Guest'}</DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                  <User className="w-4 h-4 text-primary" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{token ? 'Administrator' : 'Guest'}</span>
+                  <span className="text-xs text-muted-foreground">admin@vedadb.io</span>
+                </div>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer gap-2 text-xs" onClick={() => navigate('/settings?tab=profile')}>
+              <User className="w-3.5 h-3.5" /> Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer gap-2 text-xs" onClick={() => navigate('/settings')}>
+              <Settings className="w-3.5 h-3.5" /> Settings
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer gap-2 text-xs" onClick={cycleTheme}>
+              {theme === 'dark' ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+              {theme === 'dark' ? 'Light Mode' : theme === 'light' ? 'Dark Mode' : 'System Theme'}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="cursor-pointer gap-2 text-xs text-red-500 focus:text-red-500" onClick={() => { localStorage.removeItem('token'); setToken(''); }}>
+              <LogOut className="w-3.5 h-3.5" /> Logout
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -155,6 +281,7 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
 
 // ─── Login Page ──────────────────────────────────────
 function LoginPage() {
+  useDocTitle('Login | VedaDB API Manager');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -209,10 +336,12 @@ function LoginPage() {
 
 // ─── Dashboard Page ──────────────────────────────────
 function DashboardPage() {
+  useDocTitle('Dashboard | VedaDB API Manager');
   const [apis, setApis] = useState<APIItem[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData>({ callsOverTime: [], topApis: [], latency: [] });
   const [loading, setLoading] = useState(true);
+  const gradId = useGradientId('dash-calls');
 
   useEffect(() => {
     Promise.all([
@@ -256,12 +385,12 @@ function DashboardPage() {
           <CardContent>
             <ResponsiveContainer width="100%" height={180}>
               <AreaChart data={analytics.callsOverTime}>
-                <defs><linearGradient id="c1" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/><stop offset="95%" stopColor="#8884d8" stopOpacity={0}/></linearGradient></defs>
+                <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/><stop offset="95%" stopColor="#8884d8" stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <ReTooltip />
-                <Area type="monotone" dataKey="calls" stroke="#8884d8" fillOpacity={1} fill="url(#c1)" />
+                <Area type="monotone" dataKey="calls" stroke="#8884d8" fillOpacity={1} fill={`url(#${gradId})`} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -287,6 +416,7 @@ function DashboardPage() {
 
 // ─── APIs Page ───────────────────────────────────────
 function APIsPage() {
+  useDocTitle('APIs | VedaDB API Manager');
   const [apis, setApis] = useState<APIItem[]>([]);
   const [search, setSearch] = useState('');
   const [statusTab, setStatusTab] = useState('ALL');
@@ -296,6 +426,7 @@ function APIsPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmPublish, setConfirmPublish] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', context: '', version: '', endpoint: '', authType: 'OAuth2', throttlePolicy: '', description: '' });
+  const navigate = useNavigate();
 
   const fetch = useCallback(() => {
     setLoading(true);
@@ -370,14 +501,14 @@ function APIsPage() {
             {loading ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-xs">Loading...</TableCell></TableRow> :
              filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground text-xs">No APIs found</TableCell></TableRow> :
              filtered.map(a => (
-              <TableRow key={a.id}>
+              <TableRow key={a.id} className="cursor-pointer" onClick={() => navigate(`/apis/${a.id}`)}>
                 <TableCell className="text-xs sm:text-sm font-medium">{a.name}</TableCell>
                 <TableCell className="hidden md:table-cell text-xs sm:text-sm">{a.context}</TableCell>
                 <TableCell className="text-xs sm:text-sm">{a.version}</TableCell>
                 <TableCell className="hidden lg:table-cell text-xs sm:text-sm max-w-[200px] truncate">{a.endpoint}</TableCell>
                 <TableCell><Badge variant="secondary" className={`text-[10px] sm:text-xs ${statusColor(a.status)}`}>{a.status}</Badge></TableCell>
                 <TableCell className="text-right">
-                  <div className="flex justify-end gap-1">
+                  <div className="flex justify-end gap-1" onClick={e => e.stopPropagation()}>
                     <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={() => openEdit(a)}><Edit3 className="w-3.5 h-3.5" /></Button>
                     {a.status !== 'PUBLISHED' && <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={() => setConfirmPublish(a.id)}><Rocket className="w-3.5 h-3.5" /></Button>}
                     <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8 text-red-500" onClick={() => setConfirmDelete(a.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -440,13 +571,405 @@ function APIsPage() {
   );
 }
 
+// ─── API Detail Page ─────────────────────────────────
+function APIDetailPage() {
+  useDocTitle('API Details | VedaDB API Manager');
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const [apiItem, setApiItem] = useState<APIItem | null>(null);
+  const [resources, setResources] = useState<APIResource[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('overview');
+
+  // Try It state
+  const [tryMethod, setTryMethod] = useState('GET');
+  const [tryPath, setTryPath] = useState('');
+  const [tryHeaders, setTryHeaders] = useState<{key: string; value: string}[]>([{key: 'Content-Type', value: 'application/json'}]);
+  const [tryBody, setTryBody] = useState('');
+  const [tryResponse, setTryResponse] = useState<any>(null);
+  const [tryLoading, setTryLoading] = useState(false);
+  const [copiedCurl, setCopiedCurl] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    setLoading(true);
+    Promise.all([
+      api.getAPIById(id).then(d => setApiItem(d)).catch(() => toast.error('Failed to load API')),
+      api.getAPIResources(id).then(d => setResources(d || [])).catch(() => setResources([])),
+      api.getSubscriptionsByApi(id).then(d => setSubscriptions(d || [])).catch(() => setSubscriptions([])),
+    ]).finally(() => setLoading(false));
+  }, [id]);
+
+  const statusColor = (s: string) => {
+    if (s === 'PUBLISHED') return 'bg-green-500/10 text-green-500 hover:bg-green-500/20';
+    if (s === 'CREATED') return 'bg-blue-500/10 text-blue-500 hover:bg-blue-500/20';
+    if (s === 'DEPRECATED') return 'bg-yellow-500/10 text-yellow-500 hover:bg-yellow-500/20';
+    return 'bg-red-500/10 text-red-500 hover:bg-red-500/20';
+  };
+
+  const methodColor = (m: string) => {
+    if (m === 'GET') return 'bg-blue-500/10 text-blue-600';
+    if (m === 'POST') return 'bg-green-500/10 text-green-600';
+    if (m === 'PUT') return 'bg-yellow-500/10 text-yellow-600';
+    if (m === 'DELETE') return 'bg-red-500/10 text-red-600';
+    if (m === 'PATCH') return 'bg-purple-500/10 text-purple-600';
+    return 'bg-gray-500/10 text-gray-600';
+  };
+
+  const handleSendRequest = () => {
+    setTryLoading(true);
+    setTimeout(() => {
+      const mockResponses: Record<string, any> = {
+        GET: {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'application/json', 'x-request-id': `req-${Date.now()}` },
+          body: JSON.stringify({ id: '123', name: 'Sample Resource', createdAt: new Date().toISOString(), metadata: { version: '1.0', count: 42 } }, null, 2),
+        },
+        POST: {
+          status: 201,
+          statusText: 'Created',
+          headers: { 'content-type': 'application/json', 'location': `/resources/123` },
+          body: JSON.stringify({ id: '123', message: 'Resource created successfully', createdAt: new Date().toISOString() }, null, 2),
+        },
+        PUT: {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: '123', message: 'Resource updated', updatedAt: new Date().toISOString() }, null, 2),
+        },
+        DELETE: {
+          status: 204,
+          statusText: 'No Content',
+          headers: {},
+          body: '',
+        },
+        PATCH: {
+          status: 200,
+          statusText: 'OK',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ id: '123', message: 'Resource patched', patchedFields: ['name', 'status'] }, null, 2),
+        },
+      };
+      setTryResponse(mockResponses[tryMethod] || mockResponses['GET']);
+      setTryLoading(false);
+      toast.success(`Simulated ${tryMethod} response`);
+    }, 800);
+  };
+
+  const generateCurl = () => {
+    const baseUrl = apiItem?.endpoint || 'http://localhost:8080';
+    const path = tryPath.startsWith('/') ? tryPath : `/${tryPath}`;
+    const headers = tryHeaders.filter(h => h.key).map(h => `  -H "${h.key}: ${h.value}"`).join(' \\\n');
+    const body = tryBody ? `  -d '${tryBody}'` : '';
+    return `curl -X ${tryMethod} \\\n  "${baseUrl}${path}" \\\n${headers}${body ? ' \\\n' + body : ''}`;
+  };
+
+  const copyCurl = () => {
+    navigator.clipboard.writeText(generateCurl());
+    setCopiedCurl(true);
+    setTimeout(() => setCopiedCurl(false), 2000);
+    toast.success('cURL copied to clipboard');
+  };
+
+  const addHeader = () => setTryHeaders([...tryHeaders, { key: '', value: '' }]);
+  const removeHeader = (i: number) => setTryHeaders(tryHeaders.filter((_, idx) => idx !== i));
+  const updateHeader = (i: number, field: 'key' | 'value', val: string) => {
+    const next = [...tryHeaders];
+    next[i][field] = val;
+    setTryHeaders(next);
+  };
+
+  const docHtml = (md: string) => {
+    // Simple markdown-to-HTML renderer for the mock docs
+    const escaped = md
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mt-4 mb-2">$1</h3>')
+      .replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-5 mb-3">$1</h2>')
+      .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-extrabold mt-6 mb-4">$1</h1>')
+      .replace(/^> \*\*(.*?)\*\*(.*$)/gim, '<blockquote class="border-l-4 border-yellow-400 bg-yellow-50 dark:bg-yellow-950/20 p-3 my-3 rounded text-sm"><strong>$1</strong>$2</blockquote>')
+      .replace(/^> (.*$)/gim, '<blockquote class="border-l-4 border-muted pl-4 py-1 my-2 text-muted-foreground italic">$1</blockquote>')
+      .replace(/```json\n([\s\S]*?)\n```/gim, '<pre class="bg-muted rounded-lg p-4 my-3 overflow-x-auto text-xs font-mono"><code>$1</code></pre>')
+      .replace(/```\n([\s\S]*?)\n```/gim, '<pre class="bg-muted rounded-lg p-4 my-3 overflow-x-auto text-xs font-mono"><code>$1</code></pre>')
+      .replace(/`([^`]+)`/gim, '<code class="bg-muted px-1.5 py-0.5 rounded text-xs font-mono">$1</code>')
+      .replace(/^\* (.*$)/gim, '<li class="ml-4 text-sm">$1</li>')
+      .replace(/^- (.*$)/gim, '<li class="ml-4 text-sm">$1</li>')
+      .replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/gim, '<em>$1</em>');
+    return escaped;
+  };
+
+  if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading API details...</div>;
+  if (!apiItem) return <div className="p-6 text-sm text-red-500">API not found</div>;
+
+  return (
+    <div className="p-3 sm:p-6 space-y-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <Button variant="outline" size="sm" onClick={() => navigate('/apis')} className="w-fit"><ArrowLeft className="w-4 h-4 mr-1" />Back</Button>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className="text-xl sm:text-2xl font-bold truncate">{apiItem.name}</h2>
+            <Badge variant="secondary" className={`text-xs ${statusColor(apiItem.status)}`}>{apiItem.status}</Badge>
+          </div>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">{apiItem.description}</p>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex-wrap h-auto">
+          <TabsTrigger value="overview" className="text-xs"><FileText className="w-3.5 h-3.5 mr-1" />Overview</TabsTrigger>
+          <TabsTrigger value="resources" className="text-xs"><Layers className="w-3.5 h-3.5 mr-1" />Resources</TabsTrigger>
+          <TabsTrigger value="documentation" className="text-xs"><Globe className="w-3.5 h-3.5 mr-1" />Documentation</TabsTrigger>
+          <TabsTrigger value="subscriptions" className="text-xs"><CreditCard className="w-3.5 h-3.5 mr-1" />Subscriptions</TabsTrigger>
+          <TabsTrigger value="tryit" className="text-xs"><Zap className="w-3.5 h-3.5 mr-1" />Try It</TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-4 mt-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground"><Tag className="w-4 h-4" /><span className="text-xs font-medium">Version</span></div>
+                <p className="text-sm font-semibold">{apiItem.version}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground"><Shield className="w-4 h-4" /><span className="text-xs font-medium">Auth Type</span></div>
+                <p className="text-sm font-semibold">{apiItem.authType}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground"><Globe className="w-4 h-4" /><span className="text-xs font-medium">Context</span></div>
+                <p className="text-sm font-semibold font-mono">{apiItem.context}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground"><Terminal className="w-4 h-4" /><span className="text-xs font-medium">Endpoint</span></div>
+                <p className="text-sm font-semibold font-mono break-all">{apiItem.endpoint}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground"><Gauge className="w-4 h-4" /><span className="text-xs font-medium">Throttle Policy</span></div>
+                <p className="text-sm font-semibold">{apiItem.throttlePolicy || 'None'}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4 space-y-3">
+                <div className="flex items-center gap-2 text-muted-foreground"><Users className="w-4 h-4" /><span className="text-xs font-medium">Provider</span></div>
+                <p className="text-sm font-semibold">{apiItem.provider || 'Unknown'}</p>
+              </CardContent>
+            </Card>
+          </div>
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2 text-muted-foreground"><Clock className="w-4 h-4" /><span className="text-xs font-medium">Timestamps</span></div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <p><span className="text-muted-foreground">Created:</span> {apiItem.createdAt ? new Date(apiItem.createdAt).toLocaleString() : 'N/A'}</p>
+                <p><span className="text-muted-foreground">Updated:</span> {apiItem.updatedAt ? new Date(apiItem.updatedAt).toLocaleString() : 'N/A'}</p>
+              </div>
+            </CardContent>
+          </Card>
+          {apiItem.tags && apiItem.tags.length > 0 && (
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground mb-2 font-medium">Tags</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {apiItem.tags.map(tag => <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>)}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Resources Tab */}
+        <TabsContent value="resources" className="mt-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm sm:text-base">API Resources</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs sm:text-sm w-24">Method</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Path</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Description</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {resources.length === 0 ? (
+                      <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground text-xs">No resources defined</TableCell></TableRow>
+                    ) : resources.map((r, i) => (
+                      <TableRow key={i}>
+                        <TableCell><Badge variant="secondary" className={`text-xs ${methodColor(r.method)}`}>{r.method}</Badge></TableCell>
+                        <TableCell className="text-xs sm:text-sm font-mono">{r.path}</TableCell>
+                        <TableCell className="text-xs sm:text-sm">{r.description}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Documentation Tab */}
+        <TabsContent value="documentation" className="mt-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm sm:text-base">API Documentation</CardTitle></CardHeader>
+            <CardContent>
+              <div
+                className="prose prose-sm dark:prose-invert max-w-none"
+                dangerouslySetInnerHTML={{ __html: docHtml(apiItem.documentation || '# No Documentation\n\nNo documentation has been added for this API yet.') }}
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Subscriptions Tab */}
+        <TabsContent value="subscriptions" className="mt-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm sm:text-base">Active Subscriptions</CardTitle></CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs sm:text-sm">Application</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Tier</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Status</TableHead>
+                      <TableHead className="text-xs sm:text-sm">Created</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {subscriptions.length === 0 ? (
+                      <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground text-xs">No active subscriptions</TableCell></TableRow>
+                    ) : subscriptions.map(s => (
+                      <TableRow key={s.id}>
+                        <TableCell className="text-xs sm:text-sm font-medium">{s.appName}</TableCell>
+                        <TableCell className="text-xs sm:text-sm"><Badge variant="secondary" className="text-xs">{s.tier}</Badge></TableCell>
+                        <TableCell className="text-xs sm:text-sm"><Badge variant="secondary" className="bg-green-500/10 text-green-500 text-xs">{s.status}</Badge></TableCell>
+                        <TableCell className="text-xs sm:text-sm">{s.createdAt ? new Date(s.createdAt).toLocaleDateString() : '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Try It Tab */}
+        <TabsContent value="tryit" className="mt-4 space-y-4">
+          <Card>
+            <CardHeader><CardTitle className="text-sm sm:text-base flex items-center gap-2"><Play className="w-4 h-4" />Try It Console</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              {/* Method + Path */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <Select value={tryMethod} onValueChange={setTryMethod}>
+                  <SelectTrigger className="w-full sm:w-28 text-xs sm:text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['GET','POST','PUT','DELETE','PATCH'].map(m => <SelectItem key={m} value={m} className="text-xs sm:text-sm">{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <div className="flex-1 flex gap-2">
+                  <span className="text-xs text-muted-foreground flex items-center font-mono shrink-0">{apiItem?.endpoint}</span>
+                  <Input placeholder="/path" value={tryPath} onChange={e => setTryPath(e.target.value)} className="flex-1 text-xs sm:text-sm font-mono" />
+                </div>
+                <Button onClick={handleSendRequest} disabled={tryLoading || !tryPath} className="w-full sm:w-auto text-xs sm:text-sm">
+                  {tryLoading ? 'Sending...' : <><Play className="w-3.5 h-3.5 mr-1" />Send</>}
+                </Button>
+              </div>
+
+              {/* Headers */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="text-xs sm:text-sm font-medium">Headers</Label>
+                  <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={addHeader}>+ Add Header</Button>
+                </div>
+                <div className="space-y-2">
+                  {tryHeaders.map((h, i) => (
+                    <div key={i} className="flex gap-2">
+                      <Input placeholder="Key" value={h.key} onChange={e => updateHeader(i, 'key', e.target.value)} className="text-xs font-mono flex-1" />
+                      <Input placeholder="Value" value={h.value} onChange={e => updateHeader(i, 'value', e.target.value)} className="text-xs font-mono flex-1" />
+                      <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0 text-red-500" onClick={() => removeHeader(i)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Request Body */}
+              {tryMethod !== 'GET' && tryMethod !== 'DELETE' && (
+                <div>
+                  <Label className="text-xs sm:text-sm font-medium mb-2 block">Request Body (JSON)</Label>
+                  <textarea
+                    className="w-full min-h-[100px] rounded-md border border-input bg-background px-3 py-2 text-xs font-mono ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    placeholder='{"key": "value"}'
+                    value={tryBody}
+                    onChange={e => setTryBody(e.target.value)}
+                  />
+                </div>
+              )}
+
+              {/* cURL */}
+              {tryPath && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="text-xs sm:text-sm font-medium">cURL Command</Label>
+                    <Button variant="ghost" size="sm" className="h-6 text-xs" onClick={copyCurl}>
+                      {copiedCurl ? <><Check className="w-3 h-3 mr-1" />Copied</> : <><Copy className="w-3 h-3 mr-1" />Copy</>}
+                    </Button>
+                  </div>
+                  <pre className="bg-muted rounded-lg p-3 overflow-x-auto text-[10px] sm:text-xs font-mono whitespace-pre-wrap break-all">{generateCurl()}</pre>
+                </div>
+              )}
+
+              {/* Response */}
+              {tryResponse && (
+                <div className="space-y-2">
+                  <Label className="text-xs sm:text-sm font-medium">Response</Label>
+                  <div className="border rounded-lg overflow-hidden">
+                    <div className="bg-muted px-3 py-2 flex items-center gap-3 border-b">
+                      <Badge variant="secondary" className={`text-xs ${tryResponse.status >= 200 && tryResponse.status < 300 ? 'bg-green-500/10 text-green-500' : tryResponse.status >= 400 ? 'bg-red-500/10 text-red-500' : 'bg-yellow-500/10 text-yellow-500'}`}>
+                        {tryResponse.status} {tryResponse.statusText}
+                      </Badge>
+                    </div>
+                    {Object.keys(tryResponse.headers).length > 0 && (
+                      <div className="px-3 py-2 border-b bg-muted/30">
+                        <p className="text-[10px] text-muted-foreground font-medium mb-1">Response Headers</p>
+                        {Object.entries(tryResponse.headers).map(([k, v]) => (
+                          <div key={k} className="text-[10px] sm:text-xs font-mono"><span className="text-muted-foreground">{k}:</span> {String(v)}</div>
+                        ))}
+                      </div>
+                    )}
+                    {tryResponse.body && (
+                      <pre className="p-3 overflow-x-auto text-[10px] sm:text-xs font-mono bg-background">{tryResponse.body}</pre>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
 // ─── Store Page ──────────────────────────────────────
 function StorePage() {
+  useDocTitle('Developer Portal | VedaDB API Manager');
   const [apis, setApis] = useState<APIItem[]>([]);
   const [selected, setSelected] = useState<APIItem | null>(null);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [apps, setApps] = useState<AppItem[]>([]);
   const [subForm, setSubForm] = useState({ appId: '', tier: 'Gold' });
+  const navigate = useNavigate();
 
   useEffect(() => {
     api.getAPIs().then(d => setApis((d.apis || d || []).filter((a: APIItem) => a.status === 'PUBLISHED'))).catch(() => {});
@@ -466,7 +989,7 @@ function StorePage() {
       <h2 className="text-xl sm:text-2xl font-bold">Developer Portal</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {apis.map(api => (
-          <Card key={api.id} className="hover:shadow-md transition-shadow">
+          <Card key={api.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/apis/${api.id}`)}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm sm:text-base">{api.name}</CardTitle>
             </CardHeader>
@@ -476,7 +999,7 @@ function StorePage() {
                 <Badge variant="secondary" className="text-[10px] sm:text-xs">{api.version}</Badge>
                 <Badge variant="outline" className="text-[10px] sm:text-xs">{api.authType}</Badge>
               </div>
-              <div className="flex gap-2 pt-1">
+              <div className="flex gap-2 pt-1" onClick={e => e.stopPropagation()}>
                 <Button variant="outline" size="sm" className="text-xs flex-1" onClick={() => setSelected(api)}><Eye className="w-3 h-3 mr-1" />Details</Button>
                 <Button size="sm" className="text-xs flex-1" onClick={() => { setSelected(api); setSubscribeOpen(true); }}>Subscribe</Button>
               </div>
@@ -534,19 +1057,32 @@ function StorePage() {
 
 // ─── Applications Page ───────────────────────────────
 function AppsPage() {
+  useDocTitle('Applications | VedaDB API Manager');
   const [apps, setApps] = useState<AppItem[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editItem, setEditItem] = useState<AppItem | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [form, setForm] = useState({ name: '', tier: 'Gold', description: '' });
+  const [editForm, setEditForm] = useState({ name: '', tier: 'Gold', description: '' });
 
   const fetch = useCallback(() => {
     api.getApplications().then(d => setApps(d.applications || d || [])).catch(() => toast.error('Failed to load applications'));
   }, []);
   useEffect(() => { fetch(); }, [fetch]);
 
+  const openCreate = () => { setForm({ name: '', tier: 'Gold', description: '' }); setDialogOpen(true); };
+  const openEdit = (app: AppItem) => { setEditItem(app); setEditForm({ name: app.name, tier: app.tier, description: app.description }); setEditDialogOpen(true); };
+
   const handleCreate = async () => {
     try { await api.createApp(form); toast.success('Application created'); setDialogOpen(false); fetch(); }
     catch (e: any) { toast.error(e.message || 'Create failed'); }
+  };
+
+  const handleEdit = async () => {
+    if (!editItem) return;
+    try { await api.updateApp(editItem.id, editForm); toast.success('Application updated'); setEditDialogOpen(false); fetch(); }
+    catch (e: any) { toast.error(e.message || 'Update failed'); }
   };
 
   const handleDelete = async (id: string) => {
@@ -559,7 +1095,7 @@ function AppsPage() {
     <div className="p-3 sm:p-6 space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-xl sm:text-2xl font-bold">Applications</h2>
-        <Button onClick={() => setDialogOpen(true)} className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" />Create App</Button>
+        <Button onClick={openCreate} className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-2" />Create App</Button>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         {apps.map(app => (
@@ -567,7 +1103,10 @@ function AppsPage() {
             <CardHeader className="pb-2">
               <div className="flex items-start justify-between">
                 <CardTitle className="text-sm sm:text-base">{app.name}</CardTitle>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => setConfirmDelete(app.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(app)}><Edit3 className="w-3.5 h-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => setConfirmDelete(app.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -609,6 +1148,35 @@ function AppsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {/* Edit Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="sm:max-w-sm max-w-[95vw]">
+          <DialogHeader><DialogTitle className="text-base sm:text-lg">Edit Application</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Name</Label>
+              <Input className="text-xs sm:text-sm" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} required />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Tier</Label>
+              <Select value={editForm.tier} onValueChange={v => setEditForm({...editForm, tier: v})}>
+                <SelectTrigger className="text-xs sm:text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {['Bronze','Silver','Gold','Unlimited'].map(t => <SelectItem key={t} value={t} className="text-xs sm:text-sm">{t}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm">Description</Label>
+              <textarea className="w-full min-h-[60px] rounded-md border border-input bg-background px-3 py-2 text-xs sm:text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} className="w-full sm:w-auto text-xs sm:text-sm">Cancel</Button>
+            <Button onClick={handleEdit} className="w-full sm:w-auto text-xs sm:text-sm">Update</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {/* Confirm Delete */}
       <Dialog open={!!confirmDelete} onOpenChange={() => setConfirmDelete(null)}>
         <DialogContent className="sm:max-w-sm max-w-[95vw]">
@@ -625,6 +1193,7 @@ function AppsPage() {
 
 // ─── Subscriptions Page ──────────────────────────────
 function SubscriptionsPage() {
+  useDocTitle('Subscriptions | VedaDB API Manager');
   const [subs, setSubs] = useState<Subscription[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -678,8 +1247,10 @@ function SubscriptionsPage() {
 
 // ─── Analytics Page ──────────────────────────────────
 function AnalyticsPage() {
+  useDocTitle('Analytics | VedaDB API Manager');
   const [period, setPeriod] = useState('30d');
   const [data, setData] = useState<AnalyticsData>({ callsOverTime: [], topApis: [], latency: [] });
+  const gradId = useGradientId('analytics-calls');
 
   useEffect(() => {
     api.getAnalytics(period).then(d => setData(d || { callsOverTime: [], topApis: [], latency: [] })).catch(() => toast.error('Failed to load analytics'));
@@ -711,18 +1282,18 @@ function AnalyticsPage() {
           <Button variant="outline" size="sm" className="text-xs sm:text-sm" onClick={exportCSV}><Download className="w-3.5 h-3.5 mr-1" />Export CSV</Button>
         </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-        <Card className="lg:col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
+        <Card className="md:col-span-2">
           <CardHeader className="pb-2"><CardTitle className="text-sm sm:text-base">Calls Over Time</CardTitle></CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={240}>
               <AreaChart data={data.callsOverTime}>
-                <defs><linearGradient id="c2" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/><stop offset="95%" stopColor="#8884d8" stopOpacity={0}/></linearGradient></defs>
+                <defs><linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#8884d8" stopOpacity={0.3}/><stop offset="95%" stopColor="#8884d8" stopOpacity={0}/></linearGradient></defs>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                 <YAxis tick={{ fontSize: 12 }} />
                 <ReTooltip />
-                <Area type="monotone" dataKey="calls" stroke="#8884d8" fill="url(#c2)" />
+                <Area type="monotone" dataKey="calls" stroke="#8884d8" fill={`url(#${gradId})`} />
               </AreaChart>
             </ResponsiveContainer>
           </CardContent>
@@ -762,6 +1333,7 @@ function AnalyticsPage() {
 
 // ─── Throttle Page ───────────────────────────────────
 function ThrottlePage() {
+  useDocTitle('Rate Limiting | VedaDB API Manager');
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -867,6 +1439,7 @@ function ThrottlePage() {
 
 // ─── Users Page ──────────────────────────────────────
 function UsersPage() {
+  useDocTitle('Users | VedaDB API Manager');
   const [users, setUsers] = useState<User[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -971,7 +1544,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1024px)');
+    const mq = window.matchMedia('(max-width: 1023px)');
     const handler = (e: MediaQueryListEvent) => setCollapsed(e.matches);
     setCollapsed(mq.matches);
     mq.addEventListener('change', handler);
@@ -979,10 +1552,11 @@ function Layout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="flex h-screen overflow-hidden bg-background w-full">
       <Sidebar mobileOpen={mobileOpen} setMobileOpen={setMobileOpen} collapsed={collapsed} />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <TopBar onMenu={() => setMobileOpen(true)} />
+        <Breadcrumbs />
         <main className="flex-1 overflow-auto">
           {children}
         </main>
@@ -994,6 +1568,7 @@ function Layout({ children }: { children: React.ReactNode }) {
 // ─── App ─────────────────────────────────────────────
 function App() {
   const [token, setToken] = useState(localStorage.getItem('token') || '');
+  const [theme, setTheme] = useState('system');
 
   useEffect(() => {
     const handler = () => setToken(localStorage.getItem('token') || '');
@@ -1002,28 +1577,35 @@ function App() {
   }, []);
 
   return (
-    <AuthCtx.Provider value={{ token, setToken }}>
-      <Toaster position="top-right" richColors />
-      <HashRouter>
-        <Routes>
-          <Route path="/login" element={!token ? <LoginPage /> : <Navigate to="/" />} />
-          <Route path="*" element={!token ? <Navigate to="/login" /> : (
-            <Layout>
-              <Routes>
-                <Route path="/" element={<DashboardPage />} />
-                <Route path="/apis" element={<APIsPage />} />
-                <Route path="/store" element={<StorePage />} />
-                <Route path="/apps" element={<AppsPage />} />
-                <Route path="/subscriptions" element={<SubscriptionsPage />} />
-                <Route path="/analytics" element={<AnalyticsPage />} />
-                <Route path="/admin/throttle" element={<ThrottlePage />} />
-                <Route path="/admin/users" element={<UsersPage />} />
-              </Routes>
-            </Layout>
-          )} />
-        </Routes>
-      </HashRouter>
-    </AuthCtx.Provider>
+    <ThemeCtx.Provider value={{ theme, setTheme }}>
+      <AuthCtx.Provider value={{ token, setToken }}>
+        <Toaster position="top-right" richColors />
+        <HashRouter>
+          <Routes>
+            <Route path="/login" element={!token ? <LoginPage /> : <Navigate to="/" />} />
+            <Route path="*" element={!token ? <Navigate to="/login" /> : (
+              <Layout>
+                <Routes>
+                  <Route path="/" element={<DashboardPage />} />
+                  <Route path="/apis" element={<APIsPage />} />
+                  <Route path="/apis/:id" element={<APIDetailPage />} />
+                  <Route path="/store" element={<StorePage />} />
+                  <Route path="/apps" element={<AppsPage />} />
+                  <Route path="/subscriptions" element={<SubscriptionsPage />} />
+                  <Route path="/analytics" element={<AnalyticsPage />} />
+                  <Route path="/admin/throttle" element={<ThrottlePage />} />
+                  <Route path="/admin/users" element={<UsersPage />} />
+                  <Route path="/admin/audit-logs" element={<AuditLogsPage />} />
+                  <Route path="/admin/webhooks" element={<WebhooksPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Layout>
+            )} />
+          </Routes>
+        </HashRouter>
+      </AuthCtx.Provider>
+    </ThemeCtx.Provider>
   );
 }
 
