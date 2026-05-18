@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
 import {
   Search,
@@ -7,8 +7,20 @@ import {
   ChevronDown,
   Home,
   Menu,
+  LogOut,
+  UserCircle,
+  Settings,
 } from 'lucide-react';
 import { useState } from 'react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/useAuth';
 
 interface BreadcrumbItem {
   label: string;
@@ -50,8 +62,14 @@ interface TopBarProps {
 
 export default function TopBar({ onMenuClick }: TopBarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
   const breadcrumbs = getBreadcrumbs(location.pathname);
   const [searchQuery, setSearchQuery] = useState('');
+
+  const handleLogout = () => {
+    logout();
+  };
 
   return (
     <header
@@ -121,12 +139,42 @@ export default function TopBar({ onMenuClick }: TopBarProps) {
         <button className="hidden sm:w-8 sm:h-8 sm:flex items-center justify-center rounded-md text-[#9DA5B4] hover:bg-[#353942] hover:text-[#E8ECF1] transition-colors">
           <HelpCircle className="w-[18px] h-[18px]" />
         </button>
-        <button className="flex items-center gap-2 ml-1 sm:ml-2 pl-1 sm:pl-2 border-l border-[#3D434F]">
-          <div className="w-7 h-7 rounded-full bg-[#4488FF] flex items-center justify-center text-[11px] font-bold text-white">
-            A
-          </div>
-          <ChevronDown className="w-3 h-3 text-[#6B7280] hidden sm:block" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 ml-1 sm:ml-2 pl-1 sm:pl-2 border-l border-[#3D434F]">
+              <div className="w-7 h-7 rounded-full bg-[#4488FF] flex items-center justify-center text-[11px] font-bold text-white">
+                A
+              </div>
+              <div className="hidden md:block text-left">
+                <div className="text-[12px] text-[#E8ECF1] font-medium leading-tight">admin@vedadb.io</div>
+                <div className="text-[11px] text-[#6B7280] leading-tight">Super Admin</div>
+              </div>
+              <ChevronDown className="w-3 h-3 text-[#6B7280] hidden sm:block" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-56 bg-[#1A1D23] border-[#3D434F]">
+            <DropdownMenuLabel className="text-[#E8ECF1]">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-[#4488FF] flex items-center justify-center text-[12px] font-bold text-white">A</div>
+                <div>
+                  <div className="text-[13px] font-medium">Administrator</div>
+                  <div className="text-[11px] text-[#6B7280]">admin@vedadb.io</div>
+                </div>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-[#3D434F]" />
+            <DropdownMenuItem className="text-[#E8ECF1] focus:bg-[#353942] cursor-pointer" onClick={() => navigate('/admin/settings')}>
+              <UserCircle className="w-4 h-4 mr-2" /> Profile
+            </DropdownMenuItem>
+            <DropdownMenuItem className="text-[#E8ECF1] focus:bg-[#353942] cursor-pointer" onClick={() => navigate('/admin/settings')}>
+              <Settings className="w-4 h-4 mr-2" /> Settings
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-[#3D434F]" />
+            <DropdownMenuItem className="text-[#EF4444] focus:bg-[#353942] cursor-pointer" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" /> Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

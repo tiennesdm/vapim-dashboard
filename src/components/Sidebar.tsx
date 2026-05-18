@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 import {
   LayoutGrid,
   Globe,
@@ -16,6 +17,7 @@ import {
   ChevronDown,
   Hexagon,
   X,
+  LogIn,
 } from 'lucide-react';
 
 interface NavItem {
@@ -55,6 +57,7 @@ interface SidebarProps {
 
 export default function Sidebar({ collapsed = false, isMobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
+  const { isAuthenticated, user } = useAuth();
   const [expandedSections, setExpandedSections] = useState<string[]>(sections);
 
   const toggleSection = (section: string) => {
@@ -143,18 +146,29 @@ export default function Sidebar({ collapsed = false, isMobileOpen, onMobileClose
             })}
           </nav>
 
-          {/* Bottom: user */}
+          {/* Bottom: user or login */}
           <div className="p-3 border-t border-[#3D434F]">
-            <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#2B2F38] transition-colors cursor-pointer">
-              <div className="w-8 h-8 rounded-full bg-[#4488FF] flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0">
-                A
+            {isAuthenticated ? (
+              <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#2B2F38] transition-colors cursor-pointer">
+                <div className="w-8 h-8 rounded-full bg-[#4488FF] flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0">
+                  {user?.name?.charAt(0).toUpperCase() || 'A'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] font-medium text-[#E8ECF1] truncate">{user?.email || 'admin@vedadb.io'}</p>
+                  <p className="text-[11px] text-[#6B7280] truncate">{user?.role || 'Super Admin'}</p>
+                </div>
+                <Settings className="w-4 h-4 text-[#6B7280] flex-shrink-0" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[13px] font-medium text-[#E8ECF1] truncate">admin@vedadb.io</p>
-                <p className="text-[11px] text-[#6B7280] truncate">Super Admin</p>
-              </div>
-              <Settings className="w-4 h-4 text-[#6B7280] flex-shrink-0" />
-            </div>
+            ) : (
+              <Link
+                to="/login"
+                onClick={onMobileClose}
+                className="flex items-center gap-3 px-3 py-2 rounded-md text-[#9DA5B4] hover:bg-[#2B2F38] hover:text-[#E8ECF1] transition-colors"
+              >
+                <LogIn className="w-5 h-5 flex-shrink-0" />
+                <span className="text-[13px] font-medium">Login</span>
+              </Link>
+            )}
           </div>
         </aside>
       </>
@@ -232,19 +246,29 @@ export default function Sidebar({ collapsed = false, isMobileOpen, onMobileClose
         })}
       </nav>
 
-      {/* Bottom: user */}
+      {/* Bottom: user or login */}
       {!collapsed && (
         <div className="p-3 border-t border-[#3D434F]">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#2B2F38] transition-colors cursor-pointer">
-            <div className="w-8 h-8 rounded-full bg-[#4488FF] flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0">
-              A
+          {isAuthenticated ? (
+            <div className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-[#2B2F38] transition-colors cursor-pointer">
+              <div className="w-8 h-8 rounded-full bg-[#4488FF] flex items-center justify-center text-[12px] font-bold text-white flex-shrink-0">
+                {user?.name?.charAt(0).toUpperCase() || 'A'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[13px] font-medium text-[#E8ECF1] truncate">{user?.email || 'admin@vedadb.io'}</p>
+                <p className="text-[11px] text-[#6B7280] truncate">{user?.role || 'Super Admin'}</p>
+              </div>
+              <Settings className="w-4 h-4 text-[#6B7280] flex-shrink-0" />
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-medium text-[#E8ECF1] truncate">admin@vedadb.io</p>
-              <p className="text-[11px] text-[#6B7280] truncate">Super Admin</p>
-            </div>
-            <Settings className="w-4 h-4 text-[#6B7280] flex-shrink-0" />
-          </div>
+          ) : (
+            <Link
+              to="/login"
+              className="flex items-center gap-3 px-3 py-2 rounded-md text-[#9DA5B4] hover:bg-[#2B2F38] hover:text-[#E8ECF1] transition-colors"
+            >
+              <LogIn className="w-5 h-5 flex-shrink-0" />
+              <span className="text-[13px] font-medium">Login</span>
+            </Link>
+          )}
         </div>
       )}
     </aside>

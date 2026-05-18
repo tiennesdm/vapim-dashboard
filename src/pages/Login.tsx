@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 import {
   Mail,
   Lock,
@@ -88,6 +89,7 @@ function MeshGradient() {
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -146,11 +148,15 @@ export default function Login() {
     }
 
     setLoading(true);
-    // Simulate login
-    await new Promise(r => setTimeout(r, 1500));
+    const success = await login(email, password);
     setLoading(false);
-    // Redirect to home
-    navigate('/');
+    if (success) {
+      navigate('/');
+    } else {
+      setError('Invalid credentials. Password must be at least 4 characters.');
+      setShake(true);
+      setTimeout(() => setShake(false), 400);
+    }
   };
 
   return (
