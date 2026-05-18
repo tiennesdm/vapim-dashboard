@@ -1,4 +1,5 @@
-import { Routes, Route, Navigate } from 'react-router'
+import { Routes, Route } from 'react-router'
+import { AuthProvider } from './hooks/useAuth'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import APICreate from './pages/publisher/APICreate'
@@ -19,16 +20,17 @@ import GatewayConfig from './pages/admin/Gateway'
 import Audit from './pages/admin/Audit'
 import Webhooks from './pages/admin/Webhooks'
 import Settings from './pages/admin/Settings'
+import AIGateway from './pages/admin/AIGateway'
+import MCPHub from './pages/admin/MCPHub'
+import Governance from './pages/admin/Governance'
+import Monetization from './pages/admin/Monetization'
+import APIChat from './pages/admin/APIChat'
+import Certificates from './pages/admin/Certificates'
 import AnalyticsDashboard from './pages/analytics/AnalyticsDashboard'
-import { AuthProvider, useAuth } from './hooks/useAuth'
 
-function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
-}
-
-function AppRoutes() {
+export default function App() {
   return (
+    <AuthProvider>
     <Routes>
       {/* Home / Publisher APIs */}
       <Route path="/" element={<Home />} />
@@ -51,26 +53,25 @@ function AppRoutes() {
       <Route path="/devportal/subscriptions" element={<DevPortalSubscriptions />} />
       <Route path="/devportal/apis/:id/sdk" element={<SDK />} />
 
-      {/* Admin routes - require auth */}
-      <Route path="/admin/dashboard" element={<RequireAuth><AdminDashboard /></RequireAuth>} />
-      <Route path="/admin/users" element={<RequireAuth><Users /></RequireAuth>} />
-      <Route path="/admin/tenants" element={<RequireAuth><Tenants /></RequireAuth>} />
-      <Route path="/admin/throttling" element={<RequireAuth><Throttling /></RequireAuth>} />
-      <Route path="/admin/gateway" element={<RequireAuth><GatewayConfig /></RequireAuth>} />
-      <Route path="/admin/audit" element={<RequireAuth><Audit /></RequireAuth>} />
-      <Route path="/admin/webhooks" element={<RequireAuth><Webhooks /></RequireAuth>} />
-      <Route path="/admin/settings" element={<RequireAuth><Settings /></RequireAuth>} />
+      {/* Admin routes */}
+      <Route path="/admin/dashboard" element={<AdminDashboard />} />
+      <Route path="/admin/users" element={<Users />} />
+      <Route path="/admin/tenants" element={<Tenants />} />
+      <Route path="/admin/throttling" element={<Throttling />} />
+      <Route path="/admin/gateway" element={<GatewayConfig />} />
+      <Route path="/admin/audit" element={<Audit />} />
+      <Route path="/admin/webhooks" element={<Webhooks />} />
+      <Route path="/admin/settings" element={<Settings />} />
+      <Route path="/admin/ai-gateway" element={<AIGateway />} />
+      <Route path="/admin/mcp-hub" element={<MCPHub />} />
+      <Route path="/admin/governance" element={<Governance />} />
+      <Route path="/admin/monetization" element={<Monetization />} />
+      <Route path="/admin/api-chat" element={<APIChat />} />
+      <Route path="/admin/certificates" element={<Certificates />} />
 
-      {/* Analytics - require auth */}
-      <Route path="/analytics" element={<RequireAuth><AnalyticsDashboard /></RequireAuth>} />
+      {/* Analytics */}
+      <Route path="/analytics" element={<AnalyticsDashboard />} />
     </Routes>
-  )
-}
-
-export default function App() {
-  return (
-    <AuthProvider>
-      <AppRoutes />
     </AuthProvider>
   )
 }

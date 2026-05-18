@@ -5,7 +5,6 @@ interface AuthUser {
   email: string;
   name: string;
   role: string;
-  avatar?: string;
 }
 
 interface AuthContextType {
@@ -25,15 +24,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
-    // Mock login - accept any email with password length >= 4
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise(r => setTimeout(r, 800));
     if (password.length < 4) return false;
-
-    const newUser: AuthUser = {
-      email,
-      name: email.split('@')[0],
-      role: 'Super Admin',
-    };
+    const newUser: AuthUser = { email, name: email.split('@')[0], role: 'Super Admin' };
     setUser(newUser);
     localStorage.setItem('vapim_user', JSON.stringify(newUser));
     return true;
@@ -54,6 +47,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  if (!ctx) throw new Error('useAuth must be within AuthProvider');
   return ctx;
 }
