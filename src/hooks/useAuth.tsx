@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
-import { useNavigate } from 'react-router';
 
 interface AuthUser {
   email: string;
@@ -17,16 +16,23 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const navigate = useNavigate();
   const [user, setUser] = useState<AuthUser | null>(() => {
-    const stored = localStorage.getItem('vapim_user');
-    return stored ? JSON.parse(stored) : null;
+    try {
+      const stored = localStorage.getItem('vapim_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
   });
 
   const login = useCallback(async (email: string, password: string): Promise<boolean> => {
     await new Promise(r => setTimeout(r, 800));
     if (password.length < 4) return false;
-    const newUser: AuthUser = { email, name: email.split('@')[0], role: 'Super Admin' };
+    const newUser: AuthUser = {
+      email,
+      name: email.split('@')[0] || 'Admin',
+      role: 'Super Admin',
+    };
     setUser(newUser);
     localStorage.setItem('vapim_user', JSON.stringify(newUser));
     return true;
@@ -35,8 +41,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('vapim_user');
-    navigate('/login');
-  }, [navigate]);
+    window.location.href = '/#/login';
+  }, []);
 
   return (
     <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>

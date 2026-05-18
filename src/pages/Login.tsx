@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
   Mail,
@@ -135,6 +136,8 @@ export default function Login() {
     return true;
   };
 
+  const { login } = useAuth();
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -146,11 +149,16 @@ export default function Login() {
     }
 
     setLoading(true);
-    // Simulate login
-    await new Promise(r => setTimeout(r, 1500));
+    const success = await login(email, password);
     setLoading(false);
-    // Redirect to home
-    navigate('/');
+    if (success) {
+      // Use window.location for full page navigation to pick up auth state
+      window.location.assign('/');
+    } else {
+      setError('Invalid email or password');
+      setShake(true);
+      setTimeout(() => setShake(false), 400);
+    }
   };
 
   return (
